@@ -137,7 +137,6 @@ if st.session_state.start_flg:
     # 「ディクテーション」ボタン押下時か、「英会話開始」ボタン押下時か、チャット送信時
     if st.session_state.mode == ct.MODE_3 and (st.session_state.dictation_button_flg or st.session_state.dictation_count == 0 or st.session_state.dictation_chat_message):
         if st.session_state.dictation_first_flg:
-            st.session_state.chain_create_problem = ft.create_chain(ct.SYSTEM_TEMPLATE_CREATE_PROBLEM)
             st.session_state.dictation_first_flg = False
         # チャット入力以外
         if not st.session_state.chat_open_flg:
@@ -168,9 +167,8 @@ if st.session_state.start_flg:
                     llm_text=st.session_state.problem,
                     user_text=st.session_state.dictation_chat_message
                 )
-                st.session_state.chain_evaluation = ft.create_chain(system_template)
-                # 問題文と回答を比較し、評価結果の生成を指示するプロンプトを作成
-                llm_response_evaluation = ft.create_evaluation()
+                # 問題文と回答を比較し、評価結果の生成
+                llm_response_evaluation = ft.generate_response(system_template, "")
             
             # 評価結果のメッセージリストへの追加と表示
             with st.chat_message("assistant", avatar=ct.AI_ICON_PATH):
@@ -249,7 +247,6 @@ if st.session_state.start_flg:
     # 「シャドーイング」ボタン押下時か、「英会話開始」ボタン押下時
     if st.session_state.mode == ct.MODE_2 and (st.session_state.shadowing_button_flg or st.session_state.shadowing_count == 0 or st.session_state.shadowing_audio_input_flg):
         if st.session_state.shadowing_first_flg:
-            st.session_state.chain_create_problem = ft.create_chain(ct.SYSTEM_TEMPLATE_CREATE_PROBLEM)
             st.session_state.shadowing_first_flg = False
         
         if not st.session_state.shadowing_audio_input_flg:
@@ -293,10 +290,9 @@ if st.session_state.start_flg:
                     llm_text=st.session_state.problem,
                     user_text=audio_input_text
                 )
-                st.session_state.chain_evaluation = ft.create_chain(system_template)
                 st.session_state.shadowing_evaluation_first_flg = False
-            # 問題文と回答を比較し、評価結果の生成を指示するプロンプトを作成
-            llm_response_evaluation = ft.create_evaluation()
+            # 問題文と回答を比較し、評価結果の生成
+            llm_response_evaluation = ft.generate_response(system_template, "")
         
         # 評価結果のメッセージリストへの追加と表示
         with st.chat_message("assistant", avatar=ct.AI_ICON_PATH):

@@ -278,12 +278,3 @@ def create_problem_and_play_audio():
     play_wav(audio_output_file_path, st.session_state.speed)
 
     return problem, llm_response_audio
-
-def create_evaluation():
-    """
-    ユーザー入力値の評価生成
-    """
-
-    llm_response_evaluation = st.session_state.chain_evaluation.predict(input="")
-
-    return llm_response_evaluation
