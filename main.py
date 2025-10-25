@@ -1,4 +1,10 @@
 import streamlit as st
+
+# ページ設定を最初に実行
+st.set_page_config(
+    page_title="英語学習アプリ"
+)
+
 import os
 import time
 from time import sleep
@@ -9,12 +15,8 @@ from dotenv import load_dotenv
 import functions as ft
 import constants as ct
 
-
 # 各種設定
 load_dotenv()
-st.set_page_config(
-    page_title=ct.APP_NAME
-)
 
 # 必要なディレクトリを作成
 os.makedirs(ct.AUDIO_INPUT_DIR, exist_ok=True)
