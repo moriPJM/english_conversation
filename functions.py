@@ -6,20 +6,171 @@ import wave
 import numpy as np
 from openai import OpenAI
 
-# 音声録音ライブラリを条件付きインポート
-try:
-    from st_audiorec import st_audiorec
-    AUDIOREC_AVAILABLE = True
-except ImportError:
-    AUDIOREC_AVAILABLE = False
-
-# WebRTCベースの音声録音を条件付きインポート
-try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-    import av
-    WEBRTC_AVAILABLE = True
-except ImportError:
-    WEBRTC_AVAILABLE = False
+# カスタム音声録音機能（ブラウザネイティブAPIを使用）
+def record_audio_browser_native(audio_input_file_path):
+    """
+    ブラウザネイティブのMediaRecorder APIを使用した音声録音（改善版）
+    """
+    st.write("🎤 **ブラウザネイティブ音声録音**")
+    st.warning("⚠️ この機能は実験的です。安定した動作には「ファイルアップロード」タブをご利用ください。")
+    
+    # 簡単な説明
+    with st.expander("📖 ブラウザ録音について", expanded=False):
+        st.markdown("""
+        **🌐 ブラウザ録音の特徴:**
+        - ✅ インストール不要で直接録音可能
+        - ⚠️ ブラウザやデバイスによって動作が異なる場合があります
+        - 🔒 HTTPSまたはlocalhost環境が必要
+        - 🎙️ マイクアクセス許可が必要
+        
+        **💡 推奨:** より確実な動作のため、スマートフォンアプリでの録音をお勧めします
+        """)
+    
+    # 改善されたHTMLとJavaScript
+    audio_recorder_html = """
+    <div style="text-align: center; padding: 20px; border: 2px solid #4CAF50; border-radius: 15px; margin: 20px 0; background: linear-gradient(145deg, #f0f8ff, #e6f3ff);">
+        <h3 style="color: #2E7D32;">🎙️ ワンクリック録音</h3>
+        <div style="margin: 20px 0;">
+            <button id="recordBtn" style="background: linear-gradient(45deg, #ff6b6b, #ee5a24); color: white; border: none; padding: 15px 30px; border-radius: 25px; margin: 10px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                🎤 録音開始
+            </button>
+        </div>
+        <div id="status" style="font-size: 16px; font-weight: bold; color: #1976D2; margin: 15px 0;">
+            📝 録音準備完了 - 上のボタンをクリックしてください
+        </div>
+        <div id="audioContainer" style="margin: 20px 0; display: none;">
+            <audio id="audioPlayer" controls style="width: 100%; max-width: 400px; margin: 10px 0;"></audio>
+            <br>
+            <a id="downloadBtn" style="background: linear-gradient(45deg, #4CAF50, #45a049); color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none; margin: 10px; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                💾 音声ファイルをダウンロード
+            </a>
+        </div>
+        <div id="instructions" style="font-size: 14px; color: #666; margin-top: 20px;">
+            � 録音後、ダウンロードしたファイルを「ファイルアップロード」タブでアップロードしてください
+        </div>
+    </div>
+    
+    <script>
+    (function() {
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        
+        const recordBtn = document.getElementById('recordBtn');
+        const status = document.getElementById('status');
+        const audioContainer = document.getElementById('audioContainer');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const downloadBtn = document.getElementById('downloadBtn');
+        
+        // ブラウザ対応チェック
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            status.innerHTML = '❌ このブラウザは録音機能に対応していません';
+            recordBtn.disabled = true;
+            return;
+        }
+        
+        recordBtn.addEventListener('click', async function() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+        
+        async function startRecording() {
+            try {
+                status.innerHTML = '🔄 マイクアクセスを要求中...';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    } 
+                });
+                
+                audioChunks = [];
+                
+                // ブラウザに応じてMIMEタイプを選択
+                let mimeType = 'audio/webm';
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    mimeType = 'audio/webm;codecs=opus';
+                } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+                    mimeType = 'audio/wav';
+                }
+                
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+                
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = function() {
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    audioPlayer.src = audioUrl;
+                    audioContainer.style.display = 'block';
+                    
+                    // ファイル名にタイムスタンプを追加
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const fileName = `recorded_audio_${timestamp}.webm`;
+                    
+                    downloadBtn.href = audioUrl;
+                    downloadBtn.download = fileName;
+                    
+                    status.innerHTML = '✅ 録音完了！再生・ダウンロードできます';
+                    
+                    // マイクストリームを停止
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.onerror = function(event) {
+                    status.innerHTML = '❌ 録音エラーが発生しました';
+                    console.error('MediaRecorder error:', event);
+                };
+                
+                mediaRecorder.start(1000); // 1秒ごとにデータを収集
+                isRecording = true;
+                
+                recordBtn.innerHTML = '⏹️ 録音停止';
+                recordBtn.style.background = 'linear-gradient(45deg, #f44336, #d32f2f)';
+                status.innerHTML = '🔴 録音中... もう一度クリックで停止';
+                
+            } catch (error) {
+                console.error('録音開始エラー:', error);
+                if (error.name === 'NotAllowedError') {
+                    status.innerHTML = '❌ マイクアクセスが拒否されました。ブラウザ設定を確認してください';
+                } else if (error.name === 'NotFoundError') {
+                    status.innerHTML = '❌ マイクが見つかりません';
+                } else {
+                    status.innerHTML = '❌ 録音を開始できませんでした';
+                }
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                recordBtn.innerHTML = '🎤 録音開始';
+                recordBtn.style.background = 'linear-gradient(45deg, #ff6b6b, #ee5a24)';
+                status.innerHTML = '⏳ 録音データを処理中...';
+            }
+        }
+    })();
+    </script>
+    """
+    
+    # HTMLコンポーネントを表示
+    st.components.v1.html(audio_recorder_html, height=400)
+    
+    return False  # この機能は録音データを直接返さない
 
 # pydubを条件付きインポート
 try:
@@ -55,116 +206,176 @@ def record_audio(audio_input_file_path):
 
 def record_audio_realtime(audio_input_file_path):
     """
-    リアルタイム音声録音機能（複数のライブラリに対応）
+    複数の音声録音方法を提供（フォールバック機能付き）
     """
-    # 利用可能な録音方法を確認
-    available_methods = []
-    if AUDIOREC_AVAILABLE:
-        available_methods.append("st-audiorec")
-    if WEBRTC_AVAILABLE:
-        available_methods.append("webrtc")
+    st.write("🎤 **音声入力方法を選択**")
+    st.info("💡 **推奨**: 最も確実な「ファイルアップロード」方式をお試しください")
     
-    if not available_methods:
-        st.warning("🔧 リアルタイム録音ライブラリが利用できません。ファイルアップロード機能を使用します。")
+    # タブで録音方法を選択
+    tab1, tab2, tab3 = st.tabs(["📁 ファイルアップロード（推奨）", "🎙️ ブラウザ録音（実験的）", "📱 録音アプリガイド"])
+    
+    with tab1:
+        st.success("✅ **最も安定した方法**: スマートフォンや録音アプリで録音してからアップロード")
         return record_audio_upload(audio_input_file_path)
     
-    st.write("🎤 **リアルタイム音声録音**")
+    with tab2:
+        return record_audio_browser_native(audio_input_file_path)
     
-    # 録音方法の選択（複数利用可能な場合）
-    if len(available_methods) > 1:
-        recording_method = st.selectbox(
-            "録音方法を選択", 
-            available_methods,
-            format_func=lambda x: "🎙️ Simple Audio Recorder" if x == "st-audiorec" else "🌐 WebRTC Recorder"
-        )
-    else:
-        recording_method = available_methods[0]
-        st.info(f"🎙️ 録音方法: {recording_method}")
-    
-    # 選択された方法で録音
-    if recording_method == "st-audiorec":
-        return _record_with_st_audiorec(audio_input_file_path)
-    elif recording_method == "webrtc":
-        return _record_with_webrtc(audio_input_file_path)
-    else:
-        return record_audio_upload(audio_input_file_path)
-
-def _record_with_st_audiorec(audio_input_file_path):
-    """st-audiorecoを使用した録音"""
-    st.info("🎙️ 録音ボタンを押して話してください。話し終わったら停止してください。")
-    
-    # リアルタイム音声録音（st-audiorec使用）
-    wav_audio_data = st_audiorec()
-    
-    if wav_audio_data is not None:
-        # 録音データをファイルに保存
-        with open(audio_input_file_path, "wb") as f:
-            f.write(wav_audio_data)
-        
-        st.success("✅ 音声が録音されました！")
-        
-        # 録音した音声を再生して確認
-        st.write("📻 **録音内容を確認**")
-        st.audio(wav_audio_data, format='audio/wav')
-        
-        # 録音をやり直すオプション
-        if st.button("🔄 録音をやり直す", key="redo_audiorec"):
-            st.rerun()
-            
-        return True
-    else:
-        st.info("🎙️ 録音ボタンを押して音声を録音してください")
+    with tab3:
+        show_recording_app_guide()
         return False
 
-def _record_with_webrtc(audio_input_file_path):
-    """WebRTCを使用した録音"""
-    st.info("🌐 WebRTC録音：マイクボタンを押して録音を開始してください。")
+def show_recording_app_guide():
+    """
+    録音アプリの使用ガイドを表示
+    """
+    st.write("📱 **おすすめ録音アプリ・方法**")
     
-    webrtc_ctx = webrtc_streamer(
-        key="audio-recorder",
-        mode=WebRtcMode.SENDONLY,
-        audio_receiver_size=4096,
-        rtc_configuration=RTCConfiguration(
-            {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-        ),
-        media_stream_constraints={"video": False, "audio": True},
-    )
+    col1, col2 = st.columns(2)
     
-    if webrtc_ctx.audio_receiver:
-        st.write("🎤 録音中...")
-        # WebRTCからの音声データを処理
-        # 実装が複雑なため、シンプルな方法にフォールバック
-        st.info("WebRTC録音はまだ実装中です。st-audiorecoを使用してください。")
-        return False
+    with col1:
+        st.markdown("""
+        ### 📱 **スマートフォン**
+        
+        **iPhone の場合:**
+        - 🎤 **ボイスメモ** (標準アプリ)
+        - 🎵 **GarageBand** (高音質)
+        - 📱 **録音 - PCM録音** (高品質)
+        
+        **Android の場合:**
+        - 🎤 **音声レコーダー** (標準)
+        - 🎵 **Hi-Q MP3ボイスレコーダー**
+        - 📱 **Smart Recorder**
+        """)
     
-    return False
+    with col2:
+        st.markdown("""
+        ### 💻 **パソコン**
+        
+        **Windows の場合:**
+        - 🎤 **ボイスレコーダー** (標準アプリ)
+        - 🎵 **Audacity** (無料・高機能)
+        - 📱 **Windows Media Player**
+        
+        **Mac の場合:**
+        - 🎤 **QuickTime Player**
+        - 🎵 **GarageBand**
+        - 📱 **Voice Memos**
+        """)
+    
+    st.markdown("---")
+    
+    # 録音手順ガイド
+    with st.expander("📖 詳細録音手順", expanded=True):
+        step_col1, step_col2, step_col3 = st.columns(3)
+        
+        with step_col1:
+            st.markdown("""
+            **ステップ 1: 録音**
+            1. 📱 録音アプリを開く
+            2. 🎤 録音ボタンを押す
+            3. 🗣️ 明確に話す
+            4. ⏹️ 録音を停止
+            """)
+        
+        with step_col2:
+            st.markdown("""
+            **ステップ 2: 保存**
+            1. 💾 ファイルを保存
+            2. 📂 保存場所を確認
+            3. 🏷️ 分かりやすい名前をつける
+            4. ✅ 形式を確認 (WAV/MP3推奨)
+            """)
+        
+        with step_col3:
+            st.markdown("""
+            **ステップ 3: アップロード**
+            1. 🔄 このアプリに戻る
+            2. 📁 「ファイルアップロード」タブ
+            3. 🎤 録音ファイルを選択
+            4. 🚀 アップロード実行
+            """)
+    
+    # 音質向上のコツ
+    with st.expander("🎯 高品質録音のコツ", expanded=False):
+        tip_col1, tip_col2 = st.columns(2)
+        
+        with tip_col1:
+            st.markdown("""
+            **📍 環境設定:**
+            - 🔇 静かな場所で録音
+            - 🎤 マイクに近づく（10-15cm）
+            - 🚫 風切り音を避ける
+            - 💡 エアコン等の騒音を止める
+            """)
+        
+        with tip_col2:
+            st.markdown("""
+            **🗣️ 話し方:**
+            - 📢 はっきりと発音
+            - 🐌 ゆっくりと話す
+            - 📏 一定の音量を保つ
+            - ⏸️ 文の間に少し間を入れる
+            """)
+    
+    st.success("💡 **重要**: 録音後は「ファイルアップロード」タブでファイルをアップロードしてください！")
 
 def record_audio_upload(audio_input_file_path):
     """
-    音声ファイルアップロード機能
+    改善された音声ファイルアップロード機能
     """
+    st.write("📁 **音声ファイルアップロード**")
     
-    # Streamlitのfile_uploaderを使用した音声アップロード
+    # 使い方ガイド
+    with st.expander("📖 録音方法ガイド", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **📱 スマートフォンの場合:**
+            1. 「ボイスメモ」や「録音」アプリを開く
+            2. 録音ボタンを押して話す
+            3. 録音を停止して保存
+            4. ファイルを選択してアップロード
+            """)
+        with col2:
+            st.markdown("""
+            **💻 パソコンの場合:**
+            1. Windows「ボイスレコーダー」を開く
+            2. 録音ボタンを押して話す
+            3. 録音を停止して保存
+            4. ファイルを選択してアップロード
+            """)
+    
+    # ファイルアップロード
     uploaded_file = st.file_uploader(
-        "音声ファイルをアップロードしてください",
-        type=['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac'],
-        help="録音した音声ファイルを選択してアップロードしてください",
+        "🎙️ 音声ファイルを選択してアップロード",
+        type=['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac', 'webm', 'mp4'],
+        help="録音アプリで作成した音声ファイルをアップロードしてください",
         key="audio_upload_main"
     )
     
     if uploaded_file is not None:
+        # ファイル情報を表示
+        file_size = len(uploaded_file.getvalue()) / 1024 / 1024  # MB
+        st.info(f"📄 ファイル名: {uploaded_file.name} | サイズ: {file_size:.2f} MB")
+        
         # アップロードされたファイルを保存
         with open(audio_input_file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
+        
         st.success("✅ 音声ファイルがアップロードされました！")
         
         # アップロードした音声を再生して確認
         st.write("📻 **アップロード内容を確認**")
         st.audio(audio_input_file_path)
         
+        # アップロードをやり直すオプション
+        if st.button("🔄 別のファイルをアップロード", key="redo_upload"):
+            st.rerun()
+        
         return True
     else:
-        st.info("音声ファイルをアップロードしてください")
+        st.info("🎙️ 音声ファイルを選択してアップロードしてください")
         return False
 
 def transcribe_audio(audio_input_file_path):
