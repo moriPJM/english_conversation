@@ -25,34 +25,7 @@ try:
 except ImportError:
     st.warning("pydubが利用できません。音声変換機能が制限されます。")
     PYDUB_AVAILABLE = False
-# Langchain関連のインポート - フォールバック付き
-try:
-    from langchain_core.prompts import (
-        ChatPromptTemplate,
-        HumanMessagePromptTemplate,
-        MessagesPlaceholder,
-    )
-    from langchain_core.messages import SystemMessage
-    from langchain_community.memory import ConversationSummaryBufferMemory
-    from langchain_openai import ChatOpenAI
-    from langchain.chains import ConversationChain
-    LANGCHAIN_AVAILABLE = True
-except ImportError:
-    try:
-        from langchain.prompts import (
-            ChatPromptTemplate,
-            HumanMessagePromptTemplate,
-            MessagesPlaceholder,
-        )
-        from langchain.schema import SystemMessage
-        from langchain.memory import ConversationSummaryBufferMemory
-        from langchain_openai import ChatOpenAI
-        from langchain.chains import ConversationChain
-        LANGCHAIN_AVAILABLE = True
-    except ImportError:
-        LANGCHAIN_AVAILABLE = False
-        st.warning("Langchain が利用できません。基本的なOpenAI APIを使用します。")
-
+# Streamlit and core libraries only - no langchain
 import constants as ct
 
 def record_audio(audio_input_file_path):
@@ -259,41 +232,22 @@ def play_wav(audio_output_file_path, speed=1.0):
     
     # 一定時間後にファイルクリーンアップ（バックグラウンドで実行される想定）
 
-def create_chain(system_template):
+def generate_response(system_template, user_input, conversation_history=None):
     """
-    LLMによる回答生成用のChain作成（Langchain利用可能時のみ）
-    """
-    
-    if not LANGCHAIN_AVAILABLE:
-        return None
-    
-    try:
-        prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=system_template),
-            MessagesPlaceholder(variable_name="history"),
-            HumanMessagePromptTemplate.from_template("{input}")
-        ])
-        chain = ConversationChain(
-            llm=st.session_state.llm,
-            memory=st.session_state.memory,
-            prompt=prompt
-        )
-        return chain
-    except Exception as e:
-        st.warning(f"Chain作成エラー: {e}")
-        return None
-
-def generate_response_fallback(system_template, user_input):
-    """
-    Langchainが利用できない場合のフォールバック関数
+    OpenAI APIを直接使用してレスポンスを生成（langchain不使用）
     """
     try:
+        messages = [{"role": "system", "content": system_template}]
+        
+        # 会話履歴があれば追加
+        if conversation_history:
+            messages.extend(conversation_history[-10:])  # 最新10件のみ保持
+            
+        messages.append({"role": "user", "content": user_input})
+        
         response = st.session_state.openai_obj.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_template},
-                {"role": "user", "content": user_input}
-            ],
+            messages=messages,
             temperature=0.5
         )
         return response.choices[0].message.content
@@ -303,15 +257,11 @@ def generate_response_fallback(system_template, user_input):
 
 def create_problem_and_play_audio():
     """
-    問題生成と音声ファイルの再生
-    Args:
-        chain: 問題文生成用のChain
-        speed: 再生速度（1.0が通常速度、0.5で半分の速さ、2.0で倍速など）
-        openai_obj: OpenAIのオブジェクト
+    問題生成と音声ファイルの再生（OpenAI API直接使用）
     """
 
-    # 問題文を生成するChainを実行し、問題文を取得
-    problem = st.session_state.chain_create_problem.predict(input="")
+    # 問題文を生成
+    problem = generate_response(ct.SYSTEM_TEMPLATE_CREATE_PROBLEM, "")
 
     # LLMからの回答を音声データに変換
     llm_response_audio = st.session_state.openai_obj.audio.speech.create(

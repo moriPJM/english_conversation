@@ -5,49 +5,9 @@ from time import sleep
 from pathlib import Path
 from streamlit.components.v1 import html
 from openai import OpenAI
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 import functions as ft
 import constants as ct
-
-# Langchain memory and chains - with fallback
-try:
-    from langchain_community.memory import ConversationSummaryBufferMemory
-except ImportError:
-    try:
-        from langchain.memory import ConversationSummaryBufferMemory
-    except ImportError:
-        ConversationSummaryBufferMemory = None
-        st.warning("ConversationSummaryBufferMemory が利用できません。シンプルなメモリを使用します。")
-
-try:
-    from langchain.chains import ConversationChain
-except ImportError:
-    ConversationChain = None
-    st.warning("ConversationChain が利用できません。直接OpenAI APIを使用します。")
-
-# Langchain prompts - with fallback
-try:
-    from langchain_core.prompts import (
-        ChatPromptTemplate,
-        HumanMessagePromptTemplate,
-        MessagesPlaceholder,
-    )
-    from langchain_core.messages import SystemMessage
-except ImportError:
-    try:
-        from langchain.prompts import (
-            ChatPromptTemplate,
-            HumanMessagePromptTemplate,
-            MessagesPlaceholder,
-        )
-        from langchain.schema import SystemMessage
-    except ImportError:
-        ChatPromptTemplate = None
-        HumanMessagePromptTemplate = None
-        MessagesPlaceholder = None
-        SystemMessage = None
-        st.warning("Langchain prompts が利用できません。OpenAI APIを直接使用します。")
 
 
 # 各種設定
@@ -93,25 +53,10 @@ if "messages" not in st.session_state:
     
     st.session_state.openai_obj = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     
-    # Langchainが利用可能な場合のみ設定
-    if ChatOpenAI is not None:
-        st.session_state.llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
-    else:
-        st.session_state.llm = None
-        
-    if ConversationSummaryBufferMemory is not None and st.session_state.llm is not None:
-        st.session_state.memory = ConversationSummaryBufferMemory(
-            llm=st.session_state.llm,
-            max_token_limit=1000,
-            return_messages=True
-        )
-    else:
-        st.session_state.memory = None
+    # シンプルなメッセージ履歴を使用（langchain不使用）
+    st.session_state.conversation_history = []
 
-    # モード「日常英会話」用のChain作成（Langchain利用可能時のみ）
-    st.session_state.chain_basic_conversation = ft.create_chain(ct.SYSTEM_TEMPLATE_BASIC_CONVERSATION)
-    if st.session_state.chain_basic_conversation is None:
-        st.info("Langchainが利用できないため、シンプルなOpenAI APIを使用します。")
+    # OpenAI APIを直接使用（langchain不使用）
 
 # 初期表示
 # col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
@@ -264,8 +209,18 @@ if st.session_state.start_flg:
             st.markdown(audio_input_text)
 
         with st.spinner("回答の音声読み上げ準備中..."):
-            # ユーザー入力値をLLMに渡して回答取得
-            llm_response = st.session_state.chain_basic_conversation.predict(input=audio_input_text)
+            # ユーザー入力値をLLMに渡して回答取得（OpenAI API直接使用）
+            llm_response = ft.generate_response(
+                ct.SYSTEM_TEMPLATE_BASIC_CONVERSATION, 
+                audio_input_text,
+                st.session_state.conversation_history
+            )
+            
+            # 会話履歴に追加
+            st.session_state.conversation_history.extend([
+                {"role": "user", "content": audio_input_text},
+                {"role": "assistant", "content": llm_response}
+            ])
             
             # LLMからの回答を音声データに変換
             llm_response_audio = st.session_state.openai_obj.audio.speech.create(
