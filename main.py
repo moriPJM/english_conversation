@@ -25,6 +25,18 @@ st.set_page_config(
     page_title=ct.APP_NAME
 )
 
+# 必要なディレクトリを作成
+os.makedirs(ct.AUDIO_INPUT_DIR, exist_ok=True)
+os.makedirs(ct.AUDIO_OUTPUT_DIR, exist_ok=True)
+os.makedirs("images", exist_ok=True)
+
+# アバター画像のパスを取得する関数
+def get_avatar_path(icon_path):
+    """アイコンファイルが存在する場合はそのパス、存在しない場合はNoneを返す"""
+    if os.path.exists(icon_path):
+        return icon_path
+    return None  # Streamlitのデフォルトアバターを使用
+
 # タイトル表示
 st.markdown(f"## {ct.APP_NAME}")
 
@@ -94,7 +106,7 @@ with col3:
 with col4:
     st.session_state.englv = st.selectbox(label="英語レベル", options=ct.ENGLISH_LEVEL_OPTION, label_visibility="collapsed")
 
-with st.chat_message("assistant", avatar="images/ai_icon.jpg"):
+with st.chat_message("assistant", avatar=get_avatar_path(ct.AI_ICON_PATH)):
     st.markdown("こちらは生成AIによる音声英会話の練習アプリです。何度も繰り返し練習し、英語力をアップさせましょう。")
     st.markdown("**【操作説明】**")
     st.success("""
@@ -108,10 +120,10 @@ st.divider()
 # メッセージリストの一覧表示
 for message in st.session_state.messages:
     if message["role"] == "assistant":
-        with st.chat_message(message["role"], avatar="images/ai_icon.jpg"):
+        with st.chat_message(message["role"], avatar=get_avatar_path(ct.AI_ICON_PATH)):
             st.markdown(message["content"])
     elif message["role"] == "user":
-        with st.chat_message(message["role"], avatar="images/user_icon.jpg"):
+        with st.chat_message(message["role"], avatar=get_avatar_path(ct.USER_ICON_PATH)):
             st.markdown(message["content"])
     else:
         st.divider()

@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 import wave
 from pydub import AudioSegment
-from audiorecorder import audiorecorder
+from pydub.utils import which
 import numpy as np
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -17,23 +17,29 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationChain
 import constants as ct
 
+# ffmpegの可用性をチェック
+if not which("ffmpeg"):
+    st.warning("ffmpegが見つかりません。一部の音声機能が制限される可能性があります。")
+
 def record_audio(audio_input_file_path):
     """
     音声入力を受け取って音声ファイルを作成
     """
-
-    audio = audiorecorder(
-        start_prompt="発話開始",
-        pause_prompt="やり直す",
-        stop_prompt="発話終了",
-        start_style={"color":"white", "background-color":"black"},
-        pause_style={"color":"gray", "background-color":"white"},
-        stop_style={"color":"white", "background-color":"black"}
+    
+    # Streamlitのfile_uploaderを使用した音声アップロード
+    uploaded_file = st.file_uploader(
+        "音声ファイルをアップロードしてください",
+        type=['wav', 'mp3', 'm4a', 'ogg'],
+        help="録音した音声ファイルを選択してアップロードしてください"
     )
-
-    if len(audio) > 0:
-        audio.export(audio_input_file_path, format="wav")
+    
+    if uploaded_file is not None:
+        # アップロードされたファイルを保存
+        with open(audio_input_file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        st.success("音声ファイルがアップロードされました！")
     else:
+        st.info("音声ファイルをアップロードしてください")
         st.stop()
 
 def transcribe_audio(audio_input_file_path):
@@ -64,14 +70,22 @@ def save_to_wav(llm_response_audio, audio_output_file_path):
     """
 
     temp_audio_output_filename = f"{ct.AUDIO_OUTPUT_DIR}/temp_audio_output_{int(time.time())}.mp3"
-    with open(temp_audio_output_filename, "wb") as temp_audio_output_file:
-        temp_audio_output_file.write(llm_response_audio)
     
-    audio_mp3 = AudioSegment.from_file(temp_audio_output_filename, format="mp3")
-    audio_mp3.export(audio_output_file_path, format="wav")
+    try:
+        with open(temp_audio_output_filename, "wb") as temp_audio_output_file:
+            temp_audio_output_file.write(llm_response_audio)
+        
+        audio_mp3 = AudioSegment.from_file(temp_audio_output_filename, format="mp3")
+        audio_mp3.export(audio_output_file_path, format="wav")
 
-    # 音声出力用に一時的に作ったmp3ファイルを削除
-    os.remove(temp_audio_output_filename)
+        # 音声出力用に一時的に作ったmp3ファイルを削除
+        if os.path.exists(temp_audio_output_filename):
+            os.remove(temp_audio_output_filename)
+    except Exception as e:
+        st.error(f"音声ファイル変換エラー: {e}")
+        # 一時ファイルのクリーンアップ
+        if os.path.exists(temp_audio_output_filename):
+            os.remove(temp_audio_output_filename)
 
 def play_wav(audio_output_file_path, speed=1.0):
     """
