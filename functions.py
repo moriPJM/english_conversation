@@ -3,9 +3,20 @@ import os
 import time
 from pathlib import Path
 import wave
-from pydub import AudioSegment
-from pydub.utils import which
 import numpy as np
+
+# pydubを条件付きインポート
+try:
+    from pydub import AudioSegment
+    from pydub.utils import which
+    PYDUB_AVAILABLE = True
+    
+    # ffmpegの可用性をチェック
+    if not which("ffmpeg"):
+        st.warning("ffmpegが見つかりません。一部の音声機能が制限される可能性があります。")
+except ImportError:
+    st.warning("pydubが利用できません。音声変換機能が制限されます。")
+    PYDUB_AVAILABLE = False
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -16,10 +27,6 @@ from langchain.memory import ConversationSummaryBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationChain
 import constants as ct
-
-# ffmpegの可用性をチェック
-if not which("ffmpeg"):
-    st.warning("ffmpegが見つかりません。一部の音声機能が制限される可能性があります。")
 
 def record_audio(audio_input_file_path):
     """
@@ -72,17 +79,35 @@ def save_to_wav(llm_response_audio, audio_output_file_path):
     temp_audio_output_filename = f"{ct.AUDIO_OUTPUT_DIR}/temp_audio_output_{int(time.time())}.mp3"
     
     try:
+        # mp3ファイルを一時的に保存
         with open(temp_audio_output_filename, "wb") as temp_audio_output_file:
             temp_audio_output_file.write(llm_response_audio)
         
-        audio_mp3 = AudioSegment.from_file(temp_audio_output_filename, format="mp3")
-        audio_mp3.export(audio_output_file_path, format="wav")
+        # pydubが利用できる場合のみ変換を実行
+        if PYDUB_AVAILABLE:
+            try:
+                audio_mp3 = AudioSegment.from_file(temp_audio_output_filename, format="mp3")
+                audio_mp3.export(audio_output_file_path, format="wav")
+            except Exception as pydub_error:
+                st.warning(f"音声変換をスキップします (pydub利用不可): {pydub_error}")
+                # 変換に失敗した場合、mp3ファイルをそのまま使用
+                import shutil
+                mp3_output_path = audio_output_file_path.replace('.wav', '.mp3')
+                shutil.copy2(temp_audio_output_filename, mp3_output_path)
+                audio_output_file_path = mp3_output_path
+        else:
+            # pydubが利用できない場合、mp3ファイルをそのまま使用
+            import shutil
+            mp3_output_path = audio_output_file_path.replace('.wav', '.mp3')
+            shutil.copy2(temp_audio_output_filename, mp3_output_path)
+            audio_output_file_path = mp3_output_path
 
         # 音声出力用に一時的に作ったmp3ファイルを削除
         if os.path.exists(temp_audio_output_filename):
             os.remove(temp_audio_output_filename)
+            
     except Exception as e:
-        st.error(f"音声ファイル変換エラー: {e}")
+        st.error(f"音声ファイル処理エラー: {e}")
         # 一時ファイルのクリーンアップ
         if os.path.exists(temp_audio_output_filename):
             os.remove(temp_audio_output_filename)
@@ -95,29 +120,54 @@ def play_wav(audio_output_file_path, speed=1.0):
         speed: 再生速度（1.0が通常速度、0.5で半分の速さ、2.0で倍速など）
     """
 
-    # 音声ファイルの読み込み
-    audio = AudioSegment.from_wav(audio_output_file_path)
-    
-    # 速度を変更
-    if speed != 1.0:
-        # frame_rateを変更することで速度を調整
-        modified_audio = audio._spawn(
-            audio.raw_data, 
-            overrides={"frame_rate": int(audio.frame_rate * speed)}
-        )
-        # 元のframe_rateに戻すことで正常再生させる（ピッチを保持したまま速度だけ変更）
-        modified_audio = modified_audio.set_frame_rate(audio.frame_rate)
-
-        modified_audio.export(audio_output_file_path, format="wav")
-
-    # Streamlitの音声プレーヤーで再生
     try:
-        st.audio(audio_output_file_path, format='audio/wav')
+        if PYDUB_AVAILABLE:
+            # 音声ファイルの形式を判定
+            if audio_output_file_path.endswith('.wav'):
+                audio = AudioSegment.from_wav(audio_output_file_path)
+                audio_format = 'audio/wav'
+            elif audio_output_file_path.endswith('.mp3'):
+                audio = AudioSegment.from_mp3(audio_output_file_path)
+                audio_format = 'audio/mp3'
+            else:
+                st.error("サポートされていない音声形式です")
+                return
+            
+            # 速度を変更
+            if speed != 1.0:
+                # frame_rateを変更することで速度を調整
+                modified_audio = audio._spawn(
+                    audio.raw_data, 
+                    overrides={"frame_rate": int(audio.frame_rate * speed)}
+                )
+                # 元のframe_rateに戻すことで正常再生させる（ピッチを保持したまま速度だけ変更）
+                modified_audio = modified_audio.set_frame_rate(audio.frame_rate)
+
+                # 一時ファイルとして保存
+                temp_path = audio_output_file_path.replace('.wav', '_temp.wav').replace('.mp3', '_temp.wav')
+                modified_audio.export(temp_path, format="wav")
+                audio_output_file_path = temp_path
+                audio_format = 'audio/wav'
+
+        else:
+            # pydubが利用できない場合は速度変更なしで再生
+            if speed != 1.0:
+                st.warning("pydubが利用できないため、速度変更はスキップされます")
+            audio_format = 'audio/wav' if audio_output_file_path.endswith('.wav') else 'audio/mp3'
+
+        # Streamlitの音声プレーヤーで再生
+        st.audio(audio_output_file_path, format=audio_format)
+        
     except Exception as e:
         st.error(f"音声再生エラー: {e}")
+        # フォールバック: 元のファイルをそのまま再生
+        try:
+            format_type = 'audio/wav' if audio_output_file_path.endswith('.wav') else 'audio/mp3'
+            st.audio(audio_output_file_path, format=format_type)
+        except Exception as fallback_error:
+            st.error(f"音声再生に失敗しました: {fallback_error}")
     
-    # 一定時間後にLLMからの回答の音声ファイルを削除（cleanup）
-    # 実際の削除はアプリケーション終了時や後処理で行う
+    # 一定時間後にファイルクリーンアップ（バックグラウンドで実行される想定）
 
 def create_chain(system_template):
     """
