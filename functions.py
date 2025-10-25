@@ -5,13 +5,8 @@ from pathlib import Path
 import wave
 import numpy as np
 
-# 音声録音ライブラリを条件付きインポート
-try:
-    from audio_recorder_streamlit import audio_recorder
-    AUDIOREC_AVAILABLE = True
-except ImportError:
-    st.warning("audio_recorder_streamlit が利用できません。音声録音機能が制限されます。")
-    AUDIOREC_AVAILABLE = False
+# 音声録音ライブラリ - Streamlit標準のfile_uploaderを使用
+AUDIOREC_AVAILABLE = True  # file_uploaderは常に利用可能
 
 # pydubを条件付きインポート
 try:
@@ -47,42 +42,40 @@ def record_audio(audio_input_file_path):
 
 def record_audio_realtime(audio_input_file_path):
     """
-    リアルタイム音声録音機能
+    ファイルアップロード音声録音機能（代替機能）
     """
-    if not AUDIOREC_AVAILABLE:
-        st.error("音声録音機能が利用できません。ファイルアップロード機能をご利用ください。")
-        st.stop()
+    st.write("🎤 **音声をアップロードしてください**")
+    st.info("📱 録音アプリで音声を録音してから、ここにアップロードしてください")
     
-    st.write("🎤 **音声を録音してください**")
-    st.info("録音ボタンを押して話してください。話し終わったら停止ボタンを押してください。")
-    
-    # 音声録音コンポーネント
-    wav_audio_data = audio_recorder(
-        text="クリックして録音開始",
-        recording_color="#e8b62c",
-        neutral_color="#6aa36f",
-        icon_name="microphone",
-        icon_size="2x",
+    # 音声ファイルアップロード
+    uploaded_audio = st.file_uploader(
+        "音声ファイルをアップロード",
+        type=['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac'],
+        help="スマートフォンの録音アプリや音声メモで録音した音声ファイルをアップロードできます",
+        key="audio_upload_realtime"
     )
     
-    if wav_audio_data is not None:
+    if uploaded_audio is not None:
+        # アップロードされたファイルをバイト形式で取得
+        audio_bytes = uploaded_audio.read()
+        
         # 録音データをファイルに保存
         with open(audio_input_file_path, "wb") as f:
-            f.write(wav_audio_data)
+            f.write(audio_bytes)
         
-        st.success("✅ 音声が録音されました！")
+        st.success("✅ 音声がアップロードされました！")
         
-        # 録音した音声を再生して確認
-        st.write("📻 **録音内容を確認**")
+        # アップロードした音声を再生して確認
+        st.write("📻 **音声内容を確認**")
         st.audio(audio_input_file_path, format='audio/wav')
         
-        # 録音をやり直すオプション
-        if st.button("🔄 録音をやり直す"):
+        # アップロードをやり直すオプション
+        if st.button("🔄 音声を再アップロード"):
             st.rerun()
             
         return True
     else:
-        st.info("音声を録音してください")
+        st.info("音声ファイルをアップロードしてください")
         return False
 
 def record_audio_upload(audio_input_file_path):
@@ -93,8 +86,9 @@ def record_audio_upload(audio_input_file_path):
     # Streamlitのfile_uploaderを使用した音声アップロード
     uploaded_file = st.file_uploader(
         "音声ファイルをアップロードしてください",
-        type=['wav', 'mp3', 'm4a', 'ogg'],
-        help="録音した音声ファイルを選択してアップロードしてください"
+        type=['wav', 'mp3', 'm4a', 'aac', 'ogg', 'flac'],
+        help="録音した音声ファイルを選択してアップロードしてください",
+        key="audio_upload_main"
     )
     
     if uploaded_file is not None:
