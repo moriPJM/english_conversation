@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 import wave
 import numpy as np
+from openai import OpenAI
 
 # 音声録音ライブラリを条件付きインポート
 try:
@@ -248,6 +249,53 @@ def play_wav(audio_output_file_path, speed=1.0):
             st.audio(audio_output_file_path, format=format_type)
         except Exception as fallback_error:
             st.error(f"音声再生に失敗しました: {fallback_error}")
+
+def translate_to_japanese(english_text):
+    """
+    英語テキストを日本語に翻訳
+    Args:
+        english_text: 翻訳する英語テキスト
+    Returns:
+        str: 日本語翻訳テキスト
+    """
+    try:
+        # OpenAI APIのクライアントを初期化
+        client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたは優秀な英日翻訳者です。英語を自然で分かりやすい日本語に翻訳してください。翻訳結果のみを返してください。"},
+                {"role": "user", "content": f"以下の英語を日本語に翻訳してください:\n{english_text}"}
+            ],
+            max_tokens=500,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        st.error(f"翻訳エラー: {e}")
+        return "翻訳に失敗しました"
+
+def display_english_with_translation(english_text, show_translation=True):
+    """
+    英語テキストと日本語訳を表示
+    Args:
+        english_text: 英語テキスト
+        show_translation: 翻訳を表示するかどうか
+    """
+    # 英語テキストを表示
+    st.markdown(f"**🇺🇸 English**: {english_text}")
+    
+    if show_translation:
+        # 翻訳を取得して表示
+        with st.spinner("翻訳中..."):
+            japanese_text = translate_to_japanese(english_text)
+        st.markdown(f"**🇯🇵 日本語**: {japanese_text}")
+        st.markdown("---")
     
     # 一定時間後にファイルクリーンアップ（バックグラウンドで実行される想定）
 
