@@ -8,10 +8,18 @@ from openai import OpenAI
 
 # 音声録音ライブラリを条件付きインポート
 try:
-    from streamlit_mic_recorder import mic_recorder
-    MICRECORDER_AVAILABLE = True
+    from st_audiorec import st_audiorec
+    AUDIOREC_AVAILABLE = True
 except ImportError:
-    MICRECORDER_AVAILABLE = False
+    AUDIOREC_AVAILABLE = False
+
+# WebRTCベースの音声録音を条件付きインポート
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    import av
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
 
 # pydubを条件付きインポート
 try:
@@ -47,46 +55,89 @@ def record_audio(audio_input_file_path):
 
 def record_audio_realtime(audio_input_file_path):
     """
-    リアルタイム音声録音機能（streamlit-mic-recorder使用）
+    リアルタイム音声録音機能（複数のライブラリに対応）
     """
-    if not MICRECORDER_AVAILABLE:
+    # 利用可能な録音方法を確認
+    available_methods = []
+    if AUDIOREC_AVAILABLE:
+        available_methods.append("st-audiorec")
+    if WEBRTC_AVAILABLE:
+        available_methods.append("webrtc")
+    
+    if not available_methods:
         st.warning("🔧 リアルタイム録音ライブラリが利用できません。ファイルアップロード機能を使用します。")
         return record_audio_upload(audio_input_file_path)
     
     st.write("🎤 **リアルタイム音声録音**")
-    st.info("マイクボタンを押して話してください。話し終わったら停止してください。")
     
-    # リアルタイム音声録音
-    audio_bytes = mic_recorder(
-        start_prompt="🎤 録音開始",
-        stop_prompt="⏹️ 録音停止", 
-        just_once=False,
-        use_container_width=True,
-        callback=None,
-        args=(),
-        kwargs={},
-        key="mic_recorder_realtime"
-    )
+    # 録音方法の選択（複数利用可能な場合）
+    if len(available_methods) > 1:
+        recording_method = st.selectbox(
+            "録音方法を選択", 
+            available_methods,
+            format_func=lambda x: "🎙️ Simple Audio Recorder" if x == "st-audiorec" else "🌐 WebRTC Recorder"
+        )
+    else:
+        recording_method = available_methods[0]
+        st.info(f"🎙️ 録音方法: {recording_method}")
     
-    if audio_bytes is not None:
+    # 選択された方法で録音
+    if recording_method == "st-audiorec":
+        return _record_with_st_audiorec(audio_input_file_path)
+    elif recording_method == "webrtc":
+        return _record_with_webrtc(audio_input_file_path)
+    else:
+        return record_audio_upload(audio_input_file_path)
+
+def _record_with_st_audiorec(audio_input_file_path):
+    """st-audiorecoを使用した録音"""
+    st.info("🎙️ 録音ボタンを押して話してください。話し終わったら停止してください。")
+    
+    # リアルタイム音声録音（st-audiorec使用）
+    wav_audio_data = st_audiorec()
+    
+    if wav_audio_data is not None:
         # 録音データをファイルに保存
         with open(audio_input_file_path, "wb") as f:
-            f.write(audio_bytes['bytes'])
+            f.write(wav_audio_data)
         
         st.success("✅ 音声が録音されました！")
         
         # 録音した音声を再生して確認
         st.write("📻 **録音内容を確認**")
-        st.audio(audio_bytes['bytes'], format='audio/wav')
+        st.audio(wav_audio_data, format='audio/wav')
         
         # 録音をやり直すオプション
-        if st.button("🔄 録音をやり直す", key="redo_realtime"):
+        if st.button("🔄 録音をやり直す", key="redo_audiorec"):
             st.rerun()
             
         return True
     else:
-        st.info("マイクボタンを押して音声を録音してください")
+        st.info("🎙️ 録音ボタンを押して音声を録音してください")
         return False
+
+def _record_with_webrtc(audio_input_file_path):
+    """WebRTCを使用した録音"""
+    st.info("🌐 WebRTC録音：マイクボタンを押して録音を開始してください。")
+    
+    webrtc_ctx = webrtc_streamer(
+        key="audio-recorder",
+        mode=WebRtcMode.SENDONLY,
+        audio_receiver_size=4096,
+        rtc_configuration=RTCConfiguration(
+            {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+        ),
+        media_stream_constraints={"video": False, "audio": True},
+    )
+    
+    if webrtc_ctx.audio_receiver:
+        st.write("🎤 録音中...")
+        # WebRTCからの音声データを処理
+        # 実装が複雑なため、シンプルな方法にフォールバック
+        st.info("WebRTC録音はまだ実装中です。st-audiorecoを使用してください。")
+        return False
+    
+    return False
 
 def record_audio_upload(audio_input_file_path):
     """
