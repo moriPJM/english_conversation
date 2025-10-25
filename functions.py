@@ -3,11 +3,9 @@ import os
 import time
 from pathlib import Path
 import wave
-import pyaudio
 from pydub import AudioSegment
 from audiorecorder import audiorecorder
 import numpy as np
-from scipy.io.wavfile import write
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -98,27 +96,14 @@ def play_wav(audio_output_file_path, speed=1.0):
 
         modified_audio.export(audio_output_file_path, format="wav")
 
-    # PyAudioで再生
-    with wave.open(audio_output_file_path, 'rb') as play_target_file:
-        p = pyaudio.PyAudio()
-        stream = p.open(
-            format=p.get_format_from_width(play_target_file.getsampwidth()),
-            channels=play_target_file.getnchannels(),
-            rate=play_target_file.getframerate(),
-            output=True
-        )
-
-        data = play_target_file.readframes(1024)
-        while data:
-            stream.write(data)
-            data = play_target_file.readframes(1024)
-
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
+    # Streamlitの音声プレーヤーで再生
+    try:
+        st.audio(audio_output_file_path, format='audio/wav')
+    except Exception as e:
+        st.error(f"音声再生エラー: {e}")
     
-    # LLMからの回答の音声ファイルを削除
-    os.remove(audio_output_file_path)
+    # 一定時間後にLLMからの回答の音声ファイルを削除（cleanup）
+    # 実際の削除はアプリケーション終了時や後処理で行う
 
 def create_chain(system_template):
     """
