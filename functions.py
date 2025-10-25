@@ -178,6 +178,22 @@ def save_to_wav(llm_response_audio, audio_output_file_path):
         if os.path.exists(temp_audio_output_filename):
             os.remove(temp_audio_output_filename)
 
+def extract_speed_value(speed_string):
+    """
+    再生速度文字列から数値を抽出
+    Args:
+        speed_string: "1.0x (標準)" のような形式の文字列
+    Returns:
+        float: 速度の数値（例: 1.0）
+    """
+    try:
+        # "1.0x" の部分を抽出
+        speed_part = speed_string.split('x')[0]
+        return float(speed_part)
+    except (ValueError, IndexError):
+        # エラーの場合は標準速度を返す
+        return 1.0
+
 def play_wav(audio_output_file_path, speed=1.0):
     """
     音声ファイルの読み上げ
@@ -278,6 +294,6 @@ def create_problem_and_play_audio():
     save_to_wav(llm_response_audio.content, audio_output_file_path)
 
     # 音声ファイルの読み上げ
-    play_wav(audio_output_file_path, st.session_state.speed)
+    play_wav(audio_output_file_path, extract_speed_value(st.session_state.speed))
 
     return problem, llm_response_audio

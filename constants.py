@@ -6,7 +6,7 @@ USER_ICON_PATH = "images/user_icon.jpg"
 AI_ICON_PATH = "images/ai_icon.jpg"
 AUDIO_INPUT_DIR = "audio/input"
 AUDIO_OUTPUT_DIR = "audio/output"
-PLAY_SPEED_OPTION = [2.0, 1.5, 1.2, 1.0, 0.8, 0.6]
+PLAY_SPEED_OPTION = ["2.0x (高速)", "1.5x (速め)", "1.2x (やや速め)", "1.0x (標準)", "0.8x (やや遅め)", "0.6x (ゆっくり)"]
 ENGLISH_LEVEL_OPTION = ["初級者", "中級者", "上級者"]
 
 # 英語講師として自由な会話をさせ、文法間違いをさりげなく訂正させるプロンプト

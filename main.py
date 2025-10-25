@@ -70,9 +70,9 @@ with col1:
     else:
         st.session_state.start_flg = st.button("開始", use_container_width=True, type="primary")
 with col2:
-    st.session_state.speed = st.selectbox(label="再生速度", options=ct.PLAY_SPEED_OPTION, index=3, label_visibility="collapsed")
+    st.session_state.speed = st.selectbox(label="再生速度", options=ct.PLAY_SPEED_OPTION, index=3, label_visibility="visible")
 with col3:
-    st.session_state.mode = st.selectbox(label="モード", options=[ct.MODE_1, ct.MODE_2, ct.MODE_3], label_visibility="collapsed")
+    st.session_state.mode = st.selectbox(label="モード", options=[ct.MODE_1, ct.MODE_2, ct.MODE_3], label_visibility="visible")
     # モードを変更した際の処理
     if st.session_state.mode != st.session_state.pre_mode:
         # 自動でそのモードの処理が実行されないようにする
@@ -234,7 +234,7 @@ if st.session_state.start_flg:
             ft.save_to_wav(llm_response_audio.content, audio_output_file_path)
 
         # 音声ファイルの読み上げ
-        ft.play_wav(audio_output_file_path, speed=st.session_state.speed)
+        ft.play_wav(audio_output_file_path, speed=ft.extract_speed_value(st.session_state.speed))
 
         # AIメッセージの画面表示とリストへの追加
         with st.chat_message("assistant", avatar=ct.AI_ICON_PATH):
