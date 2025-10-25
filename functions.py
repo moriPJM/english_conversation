@@ -5,6 +5,14 @@ from pathlib import Path
 import wave
 import numpy as np
 
+# 音声録音ライブラリを条件付きインポート
+try:
+    from audio_recorder_streamlit import audio_recorder
+    AUDIOREC_AVAILABLE = True
+except ImportError:
+    st.warning("audio_recorder_streamlit が利用できません。音声録音機能が制限されます。")
+    AUDIOREC_AVAILABLE = False
+
 # pydubを条件付きインポート
 try:
     from pydub import AudioSegment
@@ -17,20 +25,77 @@ try:
 except ImportError:
     st.warning("pydubが利用できません。音声変換機能が制限されます。")
     PYDUB_AVAILABLE = False
-from langchain.prompts import (
+from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain.schema import SystemMessage
-from langchain.memory import ConversationSummaryBufferMemory
+from langchain_core.messages import SystemMessage
+from langchain_community.memory import ConversationSummaryBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationChain
 import constants as ct
 
 def record_audio(audio_input_file_path):
     """
-    音声入力を受け取って音声ファイルを作成
+    音声入力を受け取って音声ファイルを作成（録音機能付き）
+    """
+    
+    # 録音方法を選択
+    audio_input_method = st.radio(
+        "音声入力方法を選択してください：",
+        ["📱 リアルタイム録音", "📁 ファイルアップロード"],
+        horizontal=True
+    )
+    
+    if audio_input_method == "📱 リアルタイム録音":
+        return record_audio_realtime(audio_input_file_path)
+    else:
+        return record_audio_upload(audio_input_file_path)
+
+def record_audio_realtime(audio_input_file_path):
+    """
+    リアルタイム音声録音機能
+    """
+    if not AUDIOREC_AVAILABLE:
+        st.error("音声録音機能が利用できません。ファイルアップロード機能をご利用ください。")
+        st.stop()
+    
+    st.write("🎤 **音声を録音してください**")
+    st.info("録音ボタンを押して話してください。話し終わったら停止ボタンを押してください。")
+    
+    # 音声録音コンポーネント
+    wav_audio_data = audio_recorder(
+        text="クリックして録音開始",
+        recording_color="#e8b62c",
+        neutral_color="#6aa36f",
+        icon_name="microphone",
+        icon_size="2x",
+    )
+    
+    if wav_audio_data is not None:
+        # 録音データをファイルに保存
+        with open(audio_input_file_path, "wb") as f:
+            f.write(wav_audio_data)
+        
+        st.success("✅ 音声が録音されました！")
+        
+        # 録音した音声を再生して確認
+        st.write("📻 **録音内容を確認**")
+        st.audio(audio_input_file_path, format='audio/wav')
+        
+        # 録音をやり直すオプション
+        if st.button("🔄 録音をやり直す"):
+            st.rerun()
+            
+        return True
+    else:
+        st.info("音声を録音してください")
+        return False
+
+def record_audio_upload(audio_input_file_path):
+    """
+    音声ファイルアップロード機能
     """
     
     # Streamlitのfile_uploaderを使用した音声アップロード
@@ -44,10 +109,16 @@ def record_audio(audio_input_file_path):
         # アップロードされたファイルを保存
         with open(audio_input_file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
-        st.success("音声ファイルがアップロードされました！")
+        st.success("✅ 音声ファイルがアップロードされました！")
+        
+        # アップロードした音声を再生して確認
+        st.write("📻 **アップロード内容を確認**")
+        st.audio(audio_input_file_path)
+        
+        return True
     else:
         st.info("音声ファイルをアップロードしてください")
-        st.stop()
+        return False
 
 def transcribe_audio(audio_input_file_path):
     """

@@ -4,14 +4,14 @@ import time
 from time import sleep
 from pathlib import Path
 from streamlit.components.v1 import html
-from langchain.memory import ConversationSummaryBufferMemory
+from langchain_community.memory import ConversationSummaryBufferMemory
 from langchain.chains import ConversationChain
-from langchain.prompts import (
+from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain.schema import SystemMessage
+from langchain_core.messages import SystemMessage
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
@@ -202,9 +202,15 @@ if st.session_state.start_flg:
     
     # モード：「日常英会話」
     if st.session_state.mode == ct.MODE_1:
+        st.write("### 🎤 音声入力")
+        st.info("英語で話してAIと会話しましょう。リアルタイム録音またはファイルアップロードを選択できます。")
+        
         # 音声入力を受け取って音声ファイルを作成
         audio_input_file_path = f"{ct.AUDIO_INPUT_DIR}/audio_input_{int(time.time())}.wav"
-        ft.record_audio(audio_input_file_path)
+        
+        # 音声録音・アップロード処理
+        if not ft.record_audio(audio_input_file_path):
+            st.stop()  # 音声入力が完了していない場合は処理を停止
 
         # 音声入力ファイルから文字起こしテキストを取得
         with st.spinner('音声入力をテキストに変換中...'):
@@ -253,10 +259,20 @@ if st.session_state.start_flg:
             with st.spinner('問題文生成中...'):
                 st.session_state.problem, llm_response_audio = ft.create_problem_and_play_audio()
 
+        # 音声入力セクション
+        st.write("### 🎤 音声入力")
+        mode_text = "シャドーイング" if st.session_state.mode == ct.MODE_2 else "ディクテーション"
+        st.info(f"{mode_text}練習：聞いた英語を正確に発音してください。")
+        
         # 音声入力を受け取って音声ファイルを作成
         st.session_state.shadowing_audio_input_flg = True
         audio_input_file_path = f"{ct.AUDIO_INPUT_DIR}/audio_input_{int(time.time())}.wav"
-        ft.record_audio(audio_input_file_path)
+        
+        # 音声録音・アップロード処理
+        if not ft.record_audio(audio_input_file_path):
+            st.session_state.shadowing_audio_input_flg = False
+            st.stop()  # 音声入力が完了していない場合は処理を停止
+            
         st.session_state.shadowing_audio_input_flg = False
 
         with st.spinner('音声入力をテキストに変換中...'):
